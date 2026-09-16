@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#12141a"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:gravity="center_horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:text="Barcode Bridge"
+            android:textColor="#e6e8ee"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:layout_marginTop="48dp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:text="Scan the QR on your computer's bridge screen"
+            android:textColor="#8b92a3"
+            android:textSize="14sp"
+            android:gravity="center"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp" />
+
+        <LinearLayout
+            android:orientation="vertical"
+            android:layout_marginTop="36dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <Button
+                android:id="@+id/scanQr"
+                android:text="Scan QR to connect"
+                android:textColor="#081018"
+                android:backgroundTint="#4f9dff"
+                android:textAllCaps="false"
+                android:textSize="16sp"
+                android:layout_width="match_parent"
+                android:layout_height="52dp" />
+
+            <TextView
+                android:text="The desktop bridge shows a QR code with its ws:// address. Scan it and the phone connects by itself."
+                android:textColor="#5a6272"
+                android:textSize="13sp"
+                android:layout_marginTop="10dp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#262b36"
+            android:layout_marginTop="28dp"
+            android:layout_marginBottom="20dp" />
+
+        <TextView
+            android:text="Or enter the address manually"
+            android:textColor="#5a6272"
+            android:textSize="13sp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+        <EditText
+            android:id="@+id/url"
+            android:inputType="textUri"
+            android:textColor="#e6e8ee"
+            android:textColorHint="#8b92a3"
+            android:hint="ws://192.168.1.2:8080/ws"
+            android:background="#1c2029"
+            android:padding="12dp"
+            android:textSize="14sp"
+            android:singleLine="true"
+            android:selectAllOnFocus="true"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp" />
+
+        <Button
+            android:id="@+id/connect"
+            android:text="Connect"
+            android:textColor="#081018"
+            android:backgroundTint="#3fca94"
+            android:textAllCaps="false"
+            android:textSize="15sp"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="10dp" />
+
+        <TextView
+            android:id="@+id/hint"
+            android:textColor="#e06c5a"
+            android:textSize="13sp"
+            android:visibility="gone"
+            android:gravity="center"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp" />
+    </LinearLayout>
+
+</ScrollView>

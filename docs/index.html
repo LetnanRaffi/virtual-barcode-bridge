@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Virtual Barcode Bridge — Downloads</title>
+<style>
+  :root {
+    --bg:#12141a; --card:#1c2029; --border:#262b36;
+    --text:#e6e8ee; --muted:#8b92a3; --accent:#4f9dff; --green:#3fca94; --red:#e06c5a;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; min-height:100vh; }
+  .wrap { max-width:880px; margin:0 auto; padding:40px 20px 80px; }
+  header { text-align:center; padding-bottom:32px; }
+  h1 { font-size:26px; letter-spacing:.3px; padding-bottom:8px; color:#fff; }
+  h1 span { color:var(--accent); }
+  p.sub { color:var(--muted); }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px;
+          display:flex; flex-direction:column; gap:8px; }
+  .card .os { font-size:12px; text-transform:uppercase; letter-spacing:1.2px; color:var(--muted); }
+  .card h2 { font-size:19px; }
+  .card .file { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; color:var(--accent); font-size:13px; word-break:break-all; }
+  .card .desc { color:var(--muted); font-size:13px; flex:1; }
+  .card .meta { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); padding-top:6px; border-top:1px solid var(--border); }
+  a.btn { display:block; text-align:center; text-decoration:none; font-weight:600; color:#081018;
+          background:var(--accent); border-radius:8px; padding:11px; margin-top:6px; }
+  a.btn.green { background:var(--green); }
+  a.btn:hover { filter:brightness(1.1); }
+  .footer { text-align:center; color:var(--muted); font-size:13px; margin-top:36px; }
+  .footer a { color:var(--accent); }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <h1>Virtual Barcode <span>Bridge</span></h1>
+    <p class="sub">Scan barcodes on your phone, typed straight into your computer. No drivers, no installs, open source.</p>
+  </header>
+
+  <section class="cards">
+    <div class="card">
+      <div class="os">Windows · 10/11</div>
+      <h2>vbb.exe</h2>
+      <div class="file">vbb.exe</div>
+      <div class="desc">Double-click and go. Native window shows the QR. Click Allow on the firewall prompt. No admin needed.</div>
+      <div class="meta"><span>~9 MB</span><span>x64</span></div>
+      <a class="btn" href="https://github.com/LetnanRaffi/virtual-barcode-bridge/releases/latest/download/vbb.exe">Download for Windows</a>
+    </div>
+
+    <div class="card">
+      <div class="os">Linux · x64</div>
+      <h2>vbb</h2>
+      <div class="file">vbb</div>
+      <div class="desc">Run <code>./vbb</code>. Needs <code>xdotool</code> installed. Web UI opens automatically with the QR.</div>
+      <div class="meta"><span>~9 MB</span><span>x64</span></div>
+      <a class="btn" href="https://github.com/LetnanRaffi/virtual-barcode-bridge/releases/latest/download/vbb">Download for Linux</a>
+    </div>
+
+    <div class="card">
+      <div class="os">Android · 7+</div>
+      <h2>BarcodeBridge.apk</h2>
+      <div class="file">BarcodeBridge.apk</div>
+      <div class="desc">Install on your phone, open, tap “Scan QR to connect”, point at the computer QR. Portrait/landscape scan modes + scan gap.</div>
+      <div class="meta"><span>~4 MB</span><span>APK</span></div>
+      <a class="btn green" href="https://github.com/LetnanRaffi/virtual-barcode-bridge/releases/latest/download/BarcodeBridge.apk">Download for Android</a>
+    </div>
+  </section>
+
+  <div class="footer">
+    Open source · <a href="https://github.com/LetnanRaffi/virtual-barcode-bridge">Source code &amp; docs</a> · MIT License
+  </div>
+</main>
+</body>
+</html>

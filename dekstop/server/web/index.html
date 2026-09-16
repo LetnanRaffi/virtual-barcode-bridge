@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Virtual Barcode Bridge</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel2: #1c2029;
+    --border: #262b36;
+    --text: #e6e8ee;
+    --muted: #8b92a3;
+    --accent: #4f9dff;
+    --ok: #3fca94;
+    --warn: #e0b35a;
+    --err: #e06c5a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 22px; border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,.02);
+  }
+  header h1 { font-size: 16px; font-weight: 650; letter-spacing: .3px; }
+  .status { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 13px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 20px 22px; max-width: 980px; margin: 0 auto; }
+  section, .logwrap { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+  h2 { font-size: 13px; font-weight: 650; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin-bottom: 14px; }
+  .connect { display: flex; gap: 18px; align-items: center; }
+  .qrwrap img { width: 168px; height: 168px; border-radius: 8px; background: #fff; padding: 6px; flex: none; }
+  .endpoint { display: flex; gap: 8px; margin: 10px 0; }
+  .endpoint code, .endpoint button { font-size: 13px; }
+  .endpoint code {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 10px; flex: 1; word-break: break-all; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  .endpoint button { background: var(--accent); color: #081018; border: 0; border-radius: 8px; padding: 8px 4px; width: 74px; cursor: pointer; font-weight: 650; }
+  .endpoint button:hover { filter: brightness(1.08); }
+  .hint { color: var(--muted); font-size: 13px; margin-top: 10px; }
+  #inject { display: flex; gap: 10px; flex-wrap: wrap; }
+  #inject input[type=text] {
+    flex: 1; min-width: 200px; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); padding: 9px 12px; font-size: 14px; outline: none;
+  }
+  #inject input[type=text]:focus { border-color: var(--accent); }
+  #inject label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+  #inject button, .logwrap #clear {
+    background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 8px;
+    padding: 9px 14px; cursor: pointer; font-size: 13px; font-weight: 600;
+  }
+  #inject button:hover { border-color: var(--accent); color: var(--accent); }
+  .logwrap { max-width: 980px; margin: 0 auto 26px; padding-bottom: 10px; }
+  .logbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  #clear { padding: 4px 10px; font-size: 12px; }
+  ul#log { list-style: none; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px; }
+  ul#log li { padding: 5px 8px; border-radius: 6px; margin-bottom: 2px; color: var(--muted); }
+  ul#log li .t { color: #5a6272; margin-right: 8px; }
+  ul#log li.scan  { color: var(--ok); }
+  ul#log li.conn  { color: var(--accent); }
+  ul#log li.disc  { color: #7f8796; }
+  ul#log li.warn  { color: var(--warn); }
+  ul#log li.error { color: var(--err); }
+  .empty { color: #5a6272; font-style: normal; }
+  @media (max-width: 760px) { main { grid-template-columns: 1fr; } .connect { flex-direction: column; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Virtual Barcode Bridge</h1>
+  <span class="status"><span class="dot"></span>running</span>
+</header>
+
+<main>
+  <section class="connect">
+    <div class="qrwrap"><img id="qr" src="/qr.png" alt="Scan to connect" width="168" height="168"></div>
+    <div>
+      <h2>Connect scanner</h2>
+      <p class="hint" style="margin:0 0 4px">Scan with your phone browser, or connect any WebSocket client:</p>
+      <div class="endpoint">
+        <code id="wsurl">__WS_URL__</code>
+        <button id="copy">Copy</button>
+      </div>
+      <p class="hint">Barcodes scanned on your phone are typed into whatever window is focused on this machine.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Verify injection</h2>
+    <form id="inject">
+      <input type="text" id="injectText" placeholder="Type something, e.g. TEST-123" autocomplete="off">
+      <label><input type="checkbox" id="autoEnter" checked> Enter after</label>
+      <button type="submit">Send keystrokes</button>
+    </form>
+    <p class="hint">Focus another window on this machine, then click send — keystrokes arrive there for real.</p>
+  </section>
+</main>
+
+<div class="logwrap">
+  <div class="logbar">
+    <h2 style="margin:0">Activity</h2>
+    <button id="clear">Clear</button>
+  </div>
+  <ul id="log"><li class="empty">connecting…</li></ul>
+</div>
+
+<script>
+var wsHost = location.host;
+var log = document.getElementById('log');
+var empty = document.querySelector('.empty');
+var KIND = { scan: 'scan', conn: 'conn', disc: 'disc', warn: 'warn', error: 'error' };
+
+function addLine(kind, msg, time) {
+  empty.style.display = 'none';
+  var li = document.createElement('li');
+  li.className = (kind in KIND) ? kind : '';
+  var t = document.createElement('span');
+  t.className = 't';
+  t.textContent = time || new Date().toLocaleTimeString();
+  li.appendChild(t);
+  li.appendChild(document.createTextNode(msg));
+  log.prepend(li);
+  while (log.children.length > 120) log.removeChild(log.lastChild);
+}
+
+function connect() {
+  var sock = new WebSocket('ws://' + wsHost + '/monitor');
+  sock.onmessage = function (e) {
+    var ev = JSON.parse(e.data);
+    addLine(ev.kind, ev.msg, ev.time);
+  };
+  sock.onclose = function () { setTimeout(connect, 2000); };
+}
+connect();
+
+document.getElementById('copy').addEventListener('click', function () {
+  navigator.clipboard.writeText(document.getElementById('wsurl').textContent)
+    .then(function(){ this.textContent = 'Done'; var b=this; setTimeout(function(){b.textContent='Copy';},1200); }.bind(this))
+    .catch(function(){});
+});
+
+document.getElementById('inject').addEventListener('submit', function (e) {
+  e.preventDefault();
+  var data = document.getElementById('injectText').value;
+  if (!data) return;
+  fetch('/inject', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'scan', data: data, auto_enter: document.getElementById('autoEnter').checked })
+  }).then(function (r) {
+    if (!r.ok) return r.text().then(function (t) { addLine('error', 'inject failed: ' + t); });
+  });
+  document.getElementById('injectText').value = '';
+});
+
+document.getElementById('clear').addEventListener('click', function () {
+  log.innerHTML = '';
+  empty.style.display = '';
+});
+</script>
+</body>
+</html>

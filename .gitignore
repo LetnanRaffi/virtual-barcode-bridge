@@ -1,0 +1,21 @@
+# binaries live on GitHub Releases, not in the repo
+dist/
+*.exe
+*.apk
+dekstop/vbb
+
+# Go
+*.test
+
+# Gradle / Android
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/captures/
+*.log
+
+# Editor
+.idea/
+*.iml
+.vscode/
