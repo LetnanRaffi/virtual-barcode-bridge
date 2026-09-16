@@ -84,7 +84,9 @@
     <div class="qrwrap"><img id="qr" src="/qr.png" alt="Scan to connect" width="168" height="168"></div>
     <div>
       <h2>Connect scanner</h2>
-      <p class="hint" style="margin:0 0 4px">Scan with your phone browser, or connect any WebSocket client:</p>
+      <p class="hint" style="margin:0 0 4px">Choose the network your phone can reach, then scan using the Android app:</p>
+      <label for="network">Wi-Fi / LAN</label>
+      <select id="network" style="display:block;width:100%;padding:8px;margin-top:6px" aria-label="Network"></select>
       <div class="endpoint">
         <code id="wsurl">__WS_URL__</code>
         <button id="copy">Copy</button>
@@ -113,6 +115,19 @@
 </div>
 
 <script>
+var selector = document.getElementById('network');
+var initial = document.getElementById('wsurl').textContent;
+selector.add(new Option(initial, initial));
+fetch('/networks').then(function(r) { return r.json(); }).then(function(items) {
+  if (!items || !items.length) return;
+  selector.innerHTML = '';
+  items.forEach(function(item) { selector.add(new Option(item.label, item.url)); });
+  selector.value = initial;
+}).catch(function() {});
+selector.addEventListener('change', function() {
+  document.getElementById('wsurl').textContent = selector.value;
+  document.getElementById('qr').src = '/qr.png?endpoint=' + encodeURIComponent(selector.value);
+});
 var wsHost = location.host;
 var log = document.getElementById('log');
 var empty = document.querySelector('.empty');

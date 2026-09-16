@@ -27,7 +27,7 @@ All binaries are on the [releases page](https://github.com/LetnanRaffi/virtual-b
 ### Quick start — Windows
 1. Copy `vbb.exe` anywhere. Double-click it.
 2. Click **Allow** on the Windows Firewall prompt (lets the phone in on port 8080).
-3. A native window opens showing the QR code. Phone scan → connected → scan barcodes.
+3. A native window opens showing the QR code. Select the Wi-Fi or Ethernet adapter that your phone can reach; the QR updates automatically. Phone scan → connected → scan barcodes.
 
 No admin, no installation, no drivers.
 
@@ -77,6 +77,8 @@ gradle --no-daemon assembleDebug
 - WebSocket endpoint: `ws://<ip>:8080/ws`
 - Keyboard injection: `SendInput` on Windows, `xdotool` on Linux
 - Web UI (embedded, no assets on disk): QR, live scan log, manual test inject
+
+If the computer has both LAN and Wi-Fi, use the network selector above the QR (Windows or web UI). Each choice shows the adapter name and IPv4 address. The default follows the computer's outgoing route; you can select another adapter without restarting. After connecting or disconnecting an adapter, reopen the bridge to refresh the list.
 
 ## Options
 

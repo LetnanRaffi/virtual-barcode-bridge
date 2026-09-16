@@ -15,6 +15,7 @@ import (
 	"github.com/skip2/go-qrcode"
 
 	"virtual-barcode-bridge/keyboard"
+	"virtual-barcode-bridge/network"
 )
 
 //go:embed web/index.html
@@ -79,10 +80,11 @@ type Server struct {
 	monitor *monitorHub
 	qrPNG   []byte
 	wsURL   string
+	options []network.Option
 }
 
-func New(kb keyboard.Injector, wsURL string) *Server {
-	s := &Server{kb: kb, monitor: newMonitorHub(), wsURL: wsURL}
+func New(kb keyboard.Injector, wsURL string, options ...network.Option) *Server {
+	s := &Server{kb: kb, monitor: newMonitorHub(), wsURL: wsURL, options: options}
 	if q, err := qrcode.New(wsURL, qrcode.Medium); err == nil {
 		s.qrPNG, _ = q.PNG(384)
 	}
@@ -93,6 +95,10 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleIndex)
 	mux.HandleFunc("/qr.png", s.handleQR)
+	mux.HandleFunc("/networks", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(s.options)
+	})
 	mux.HandleFunc("/ws", s.handleWS)
 	mux.HandleFunc("/monitor", s.handleMonitor)
 	mux.HandleFunc("/inject", s.handleInject)
@@ -110,8 +116,29 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleQR(w http.ResponseWriter, r *http.Request) {
+	png := s.qrPNG
+	if endpoint := r.URL.Query().Get("endpoint"); endpoint != "" && endpoint != s.wsURL {
+		allowed := false
+		for _, option := range s.options {
+			if endpoint == option.URL {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			http.Error(w, "unknown network", http.StatusBadRequest)
+			return
+		}
+		var err error
+		png, err = qrcode.Encode(endpoint, qrcode.Medium, 384)
+		if err != nil {
+			http.Error(w, "QR generation failed", 500)
+			return
+		}
+	}
+	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "image/png")
-	w.Write(s.qrPNG)
+	w.Write(png)
 }
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {

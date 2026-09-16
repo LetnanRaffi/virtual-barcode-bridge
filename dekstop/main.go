@@ -25,27 +25,14 @@ func main() {
 	noNative := flag.Bool("no-native", false, "don't open the native status window (Windows)")
 	flag.Parse()
 
-	ip := *ipFlag
-	if ip == "" {
-		ips := network.AllNonLoopbackIPs()
-		if len(ips) == 0 {
-			var err error
-			ip, err = network.LocalIP()
-			if err != nil {
-				log.Fatalf("detect LAN IP: %v", err)
-			}
-		} else {
-			ip = ips[0]
-			if len(ips) > 1 {
-				fmt.Printf("Multiple LAN IPs detected; using %s. Override with -ip.\n", ip)
-				for _, a := range ips {
-					fmt.Printf("  - %s\n", a)
-				}
-			}
-		}
+	options := network.Options(*port, *ipFlag)
+	if len(options) == 0 {
+		log.Fatal("No active network found. Connect Wi-Fi or LAN, then reopen the app.")
 	}
-
-	wsURL := fmt.Sprintf("ws://%s:%d/ws", ip, *port)
+	wsURL := options[0].URL
+	for _, option := range options {
+		fmt.Printf("Network: %s (%s)\n", option.Label, option.URL)
+	}
 	uiURL := fmt.Sprintf("http://localhost:%d", *port)
 
 	fmt.Printf("Virtual Barcode Bridge\n")
@@ -58,7 +45,7 @@ func main() {
 		}
 	}
 
-	srv := server.New(keyboard.New(), wsURL)
+	srv := server.New(keyboard.New(), wsURL, options...)
 
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
 	if err != nil {
@@ -74,7 +61,7 @@ func main() {
 
 	usingNative := false
 	if !*noNative {
-		if openNativeWindow(wsURL) {
+		if openNativeWindow(wsURL, options...) {
 			usingNative = true
 			fmt.Println("Native status window opened; shutting it down stops the bridge.")
 		} else if runtime.GOOS == "windows" {

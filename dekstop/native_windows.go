@@ -3,11 +3,14 @@
 package main
 
 import (
+	"log"
 	"os"
+	"runtime"
 	"syscall"
 	"unsafe"
 
 	"github.com/skip2/go-qrcode"
+	"virtual-barcode-bridge/network"
 )
 
 var (
@@ -24,14 +27,14 @@ var (
 	procDefWindowProcW   = user32.NewProc("DefWindowProcW")
 	procDestroyWindow    = user32.NewProc("DestroyWindow")
 	procPostQuitMessage  = user32.NewProc("PostQuitMessage")
-	procGetModuleHandleW = user32.NewProc("GetModuleHandleW")
+	procGetModuleHandleW = k32.NewProc("GetModuleHandleW")
 	procLoadCursorW      = user32.NewProc("LoadCursorW")
 	procBeginPaint       = user32.NewProc("BeginPaint")
 	procEndPaint         = user32.NewProc("EndPaint")
 	procGetClientRect    = user32.NewProc("GetClientRect")
 	procDrawTextW        = user32.NewProc("DrawTextW")
-	procSetBkMode        = user32.NewProc("SetBkMode")
-	procSetTextColor     = user32.NewProc("SetTextColor")
+	procSetBkMode        = gdi32.NewProc("SetBkMode")
+	procSetTextColor     = gdi32.NewProc("SetTextColor")
 
 	procCreateCompatibleDC = gdi32.NewProc("CreateCompatibleDC")
 	procDeleteDC           = gdi32.NewProc("DeleteDC")
@@ -66,13 +69,14 @@ const (
 )
 
 var (
-	winURL     string
-	winHwnd    uintptr
-	memDC      uintptr
-	qrmem      uintptr
-	qrW, qrH   int32
-	urlUTF     []uint16
-	wndProcPtr uintptr
+	memDC          uintptr
+	qrmem          uintptr
+	oldBitmap      uintptr
+	qrW, qrH       int32
+	urlUTF         []uint16
+	wndProcPtr     uintptr
+	networkCombo   uintptr
+	networkOptions []network.Option
 )
 
 type point struct{ x, y int32 }
@@ -132,10 +136,30 @@ type bitmapInfo struct {
 	_      [1]uint32
 }
 
-// openNativeWindow draws the QR + connection URL in a native GDI window and
-// pumps messages until the window is closed, then exits the process.
-func openNativeWindow(wsURL string) bool {
-	winURL = wsURL
+// Creation, painting and the message loop must share one OS thread.
+func openNativeWindow(wsURL string, options ...network.Option) bool {
+	ready := make(chan bool, 1)
+	go func() {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+		defer cleanupQR()
+		if !createNativeWindow(wsURL, options...) {
+			ready <- false
+			return
+		}
+		ready <- true
+		pumpMessages()
+		cleanupQR()
+		os.Exit(0)
+	}()
+	return <-ready
+}
+
+func createNativeWindow(wsURL string, options ...network.Option) bool {
+	networkOptions = options
+	if len(networkOptions) == 0 {
+		networkOptions = []network.Option{{Label: wsURL, URL: wsURL}}
+	}
 	u, err := syscall.UTF16FromString(wsURL)
 	if err != nil {
 		return false
@@ -153,21 +177,40 @@ func openNativeWindow(wsURL string) bool {
 
 	title, _ := syscall.UTF16PtrFromString("Virtual Barcode Bridge")
 	class, _ := syscall.UTF16PtrFromString(wndClassName)
-	hwnd, _, _ := procCreateWindowExW.Call(
+	hwnd, _, callErr := procCreateWindowExW.Call(
 		0,
 		uintptr(unsafe.Pointer(class)),
 		uintptr(unsafe.Pointer(title)),
-		wsOverlapped|wsVisible,
+		wsOverlapped|wsVisible|0x02000000,
 		cwUseDefault, cwUseDefault,
 		460, 640,
 		0, 0, hInst, 0)
 	if hwnd == 0 {
+		log.Printf("create native window: %v", callErr)
 		return false
 	}
-	winHwnd = hwnd
+	comboClass, _ := syscall.UTF16PtrFromString("COMBOBOX")
+	networkCombo, _, callErr = procCreateWindowExW.Call(
+		0, uintptr(unsafe.Pointer(comboClass)), 0,
+		0x40000000|wsVisible|0x00200000|0x00010000|3,
+		16, 16, 410, 240, hwnd, 101, hInst, 0)
+	if networkCombo == 0 {
+		log.Printf("create network selector: %v", callErr)
+		procDestroyWindow.Call(hwnd)
+		return false
+	}
+	send := user32.NewProc("SendMessageW")
+	font, _, _ := procGetStockObject.Call(defaultFont)
+	send.Call(networkCombo, 0x0030, font, 1)
+	for i, option := range networkOptions {
+		label, _ := syscall.UTF16PtrFromString(option.Label)
+		send.Call(networkCombo, 0x0143, 0, uintptr(unsafe.Pointer(label)))
+		if option.URL == wsURL {
+			send.Call(networkCombo, 0x014E, uintptr(i), 0)
+		}
+	}
 	procShowWindow.Call(hwnd, swShowDefault)
 
-	go pumpMessages()
 	return true
 }
 
@@ -219,7 +262,7 @@ func buildQRBits(content string) error {
 	dst := unsafe.Slice((*byte)(unsafe.Pointer(bits)), qw*qh*4)
 	copy(dst, px)
 
-	procSelectObject.Call(dc, bmp)
+	oldBitmap, _, _ = procSelectObject.Call(dc, bmp)
 	memDC = dc
 	qrmem = bmp
 	qrW, qrH = qw, qh
@@ -242,16 +285,44 @@ func registerClass() bool {
 		hBrush:    brush,
 		className: class,
 	}
-	atom, _, _ := procRegisterClassExW.Call(uintptr(unsafe.Pointer(wc)))
+	atom, _, callErr := procRegisterClassExW.Call(uintptr(unsafe.Pointer(wc)))
 	// atom = class atom (nonzero on success). err reflects GetLastError, which
 	// may be stale after a successful call, so rely on the atom.
+	if atom == 0 {
+		log.Printf("register native window: %v", callErr)
+	}
 	return atom != 0
 }
 
 func wndProc(hwnd uintptr, uMsg uint32, wParam, lParam uintptr) uintptr {
 	switch uMsg {
-	case wmEraseBack:
-		return 1
+	case 0x0005: // WM_SIZE
+		if networkCombo != 0 {
+			width := int32(lParam&0xffff) - 32
+			if width < 80 {
+				width = 80
+			}
+			user32.NewProc("MoveWindow").Call(networkCombo, 16, 16, uintptr(width), 240, 1)
+		}
+	case 0x0111: // WM_COMMAND / CBN_SELCHANGE
+		if wParam&0xffff == 101 && (wParam>>16)&0xffff == 1 {
+			index, _, _ := user32.NewProc("SendMessageW").Call(networkCombo, 0x0147, 0, 0)
+			if index < uintptr(len(networkOptions)) {
+				endpoint := networkOptions[index].URL
+				oldDC, oldQR, oldSelected := memDC, qrmem, oldBitmap
+				if err := buildQRBits(endpoint); err != nil {
+					log.Printf("switch network: %v", err)
+				} else {
+					newDC, newQR, newSelected := memDC, qrmem, oldBitmap
+					memDC, qrmem, oldBitmap = oldDC, oldQR, oldSelected
+					cleanupQR()
+					memDC, qrmem, oldBitmap = newDC, newQR, newSelected
+					urlUTF, _ = syscall.UTF16FromString(endpoint)
+					user32.NewProc("InvalidateRect").Call(hwnd, 0, 1)
+				}
+			}
+			return 0
+		}
 	case wmClose:
 		procDestroyWindow.Call(hwnd)
 		return 0
@@ -269,9 +340,13 @@ func wndProc(hwnd uintptr, uMsg uint32, wParam, lParam uintptr) uintptr {
 func drawWindow(hwnd uintptr) {
 	var ps paintStruct
 	hdc, _, _ := procBeginPaint.Call(hwnd, uintptr(unsafe.Pointer(&ps)))
+	defer procEndPaint.Call(hwnd, uintptr(unsafe.Pointer(&ps)))
 	var cr rect
 	procGetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&cr)))
 
+	if hdc == 0 {
+		return
+	}
 	cw := cr.right - cr.left
 	ch := cr.bottom - cr.top
 
@@ -279,12 +354,15 @@ func drawWindow(hwnd uintptr) {
 	if margin < 10 {
 		margin = 10
 	}
-	top := ch / 16
+	top := int32(64)
 	qsize := cw - 2*margin
-	if qsize > ch-80 {
-		qsize = ch - 80
+	if qsize > ch-top-80 {
+		qsize = ch - top - 80
 	}
 
+	if qsize <= 0 {
+		return
+	}
 	procStretchBlt.Call(
 		hdc,
 		uintptr(margin), uintptr(top), uintptr(qsize), uintptr(qsize),
@@ -298,34 +376,49 @@ func drawWindow(hwnd uintptr) {
 	procSetTextColor.Call(hdc, green)
 	tr := rect{margin, top + qsize + 6, cw - margin, top + qsize + 34}
 	procDrawTextW.Call(
+		hdc,
 		uintptr(unsafe.Pointer(&urlUTF[0])), ^uintptr(0), // -1 for text length
 		uintptr(unsafe.Pointer(&tr)),
 		dtSingleLine|dtCenter|dtVCenter)
 
 	procSetTextColor.Call(hdc, 0x00e6e8ee)
 	tr = rect{0, tr.bottom + 2, cw, tr.bottom + 30}
-	t2, _ := syscall.UTF16PtrFromString("Scan with your phone camera")
+	t2, _ := syscall.UTF16PtrFromString("Choose Wi-Fi / LAN above, then scan with the app")
 	procDrawTextW.Call(
+		hdc,
 		uintptr(unsafe.Pointer(t2)), ^uintptr(0),
 		uintptr(unsafe.Pointer(&tr)),
 		dtSingleLine|dtCenter|dtVCenter)
 
-	procEndPaint.Call(hwnd, uintptr(unsafe.Pointer(&ps)))
 }
 
 func pumpMessages() {
 	var m msg
 	for {
-		ret, _, _ := procGetMessageW.Call(uintptr(unsafe.Pointer(&m)), 0, 0, 0)
-		if int32(ret) <= 0 {
+		ret, _, callErr := procGetMessageW.Call(uintptr(unsafe.Pointer(&m)), 0, 0, 0)
+		if int32(ret) == -1 {
+			log.Printf("native message loop: %v", callErr)
+			break
+		}
+		if ret == 0 {
 			break
 		}
 		procTranslateMessage.Call(uintptr(unsafe.Pointer(&m)))
 		procDispatchMessageW.Call(uintptr(unsafe.Pointer(&m)))
 	}
-	procDeleteObject.Call(qrmem)
-	procDeleteDC.Call(memDC)
-	os.Exit(0)
+}
+
+func cleanupQR() {
+	if memDC != 0 {
+		if oldBitmap != 0 {
+			procSelectObject.Call(memDC, oldBitmap)
+		}
+		if qrmem != 0 {
+			procDeleteObject.Call(qrmem)
+		}
+		procDeleteDC.Call(memDC)
+	}
+	memDC, qrmem, oldBitmap = 0, 0, 0
 }
 
 const (
