@@ -39,7 +39,7 @@ No admin, no installation, no drivers.
 ### Android app
 1. Install `BarcodeBridge.apk` on the phone.
 2. Open it → **Scan QR to connect**.
-3. Scan the QR shown on the computer. Dashboard opens: choose **Scan** (portrait) or **Scan** (landscape), pick the scan gap, and go.
+3. Scan the QR shown on the computer. Dashboard opens: choose **Scan · Portrait** or **Scan · Landscape**, set the time between scans, and go.
 
 ## Build from source
 
@@ -55,7 +55,7 @@ go build -buildvcs=false -o vbb .
 GOOS=windows GOARCH=amd64 go build -buildvcs=false -o vbb.exe .
 ```
 
-### Android (Gradle)
+### Android (Gradle 8.7, JDK 17)
 
 ```bash
 cd android

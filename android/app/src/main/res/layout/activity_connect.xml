@@ -1,109 +1,111 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#12141a"
+    android:background="@color/bridge_bg"
     android:fillViewport="true">
-
     <LinearLayout
-        android:orientation="vertical"
-        android:padding="24dp"
-        android:gravity="center_horizontal"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
-
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
         <TextView
-            android:text="Barcode Bridge"
-            android:textColor="#e6e8ee"
-            android:textSize="24sp"
-            android:textStyle="bold"
-            android:layout_marginTop="48dp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
-
-        <TextView
-            android:text="Scan the QR on your computer's bridge screen"
-            android:textColor="#8b92a3"
-            android:textSize="14sp"
-            android:gravity="center"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp" />
-
-        <LinearLayout
-            android:orientation="vertical"
-            android:layout_marginTop="36dp"
+            style="@style/Bridge.Body"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content">
-
+            android:layout_height="wrap_content"
+            android:text="BARCODE BRIDGE"
+            android:textColor="@color/bridge_blue"
+            android:letterSpacing="0.12"
+            android:layout_marginTop="20dp" />
+        <TextView
+            style="@style/Bridge.Title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Connect your computer"
+            android:layout_marginTop="16dp" />
+        <TextView
+            style="@style/Bridge.Body"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Your phone scans. Your computer types."
+            android:layout_marginTop="8dp" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/surface"
+            android:padding="20dp"
+            android:layout_marginTop="28dp">
+            <TextView
+                style="@style/Bridge.Heading"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Start with the desktop QR" />
+            <TextView
+                style="@style/Bridge.Body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="1. Open Barcode Bridge on your computer.\n2. Choose a network your phone can reach.\n3. Scan the QR code to connect."
+                android:layout_marginTop="12dp" />
             <Button
                 android:id="@+id/scanQr"
+                style="@style/Bridge.Button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:text="Scan QR to connect"
-                android:textColor="#081018"
-                android:backgroundTint="#4f9dff"
-                android:textAllCaps="false"
-                android:textSize="16sp"
-                android:layout_width="match_parent"
-                android:layout_height="52dp" />
-
-            <TextView
-                android:text="The desktop bridge shows a QR code with its ws:// address. Scan it and the phone connects by itself."
-                android:textColor="#5a6272"
-                android:textSize="13sp"
-                android:layout_marginTop="10dp"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
+                android:layout_marginTop="20dp" />
         </LinearLayout>
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#262b36"
-            android:layout_marginTop="28dp"
-            android:layout_marginBottom="20dp" />
-
         <TextView
-            android:text="Or enter the address manually"
-            android:textColor="#5a6272"
-            android:textSize="13sp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
-
+            style="@style/Bridge.Heading"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Connect manually"
+            android:layout_marginTop="28dp" />
+        <TextView
+            style="@style/Bridge.Body"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Enter the address shown below the desktop QR."
+            android:layout_marginTop="6dp" />
+        <TextView
+            style="@style/Bridge.Body"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Computer address"
+            android:labelFor="@id/url"
+            android:layout_marginTop="16dp" />
         <EditText
             android:id="@+id/url"
-            android:inputType="textUri"
-            android:textColor="#e6e8ee"
-            android:textColorHint="#8b92a3"
-            android:hint="ws://192.168.1.2:8080/ws"
-            android:background="#1c2029"
-            android:padding="12dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="56dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/field"
+            android:padding="16dp"
+            android:textColor="@color/bridge_text"
+            android:textColorHint="@color/bridge_muted"
             android:textSize="14sp"
+            android:inputType="textUri"
             android:singleLine="true"
             android:selectAllOnFocus="true"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp" />
-
+            android:hint="ws://192.168.1.2:8080/ws" />
         <Button
             android:id="@+id/connect"
-            android:text="Connect"
-            android:textColor="#081018"
-            android:backgroundTint="#3fca94"
-            android:textAllCaps="false"
-            android:textSize="15sp"
-            android:layout_width="match_parent"
-            android:layout_height="46dp"
-            android:layout_marginTop="10dp" />
-
-        <TextView
-            android:id="@+id/hint"
-            android:textColor="#e06c5a"
-            android:textSize="13sp"
-            android:visibility="gone"
-            android:gravity="center"
+            style="@style/Bridge.Button.Secondary"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:text="Connect with address"
             android:layout_marginTop="12dp" />
+        <TextView
+            android:id="@+id/hint"
+            style="@style/Bridge.Body"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:padding="16dp"
+            android:background="@drawable/surface"
+            android:accessibilityLiveRegion="polite"
+            android:visibility="gone" />
     </LinearLayout>
-
 </ScrollView>
