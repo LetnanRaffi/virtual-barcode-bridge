@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"runtime"
+	"sync"
 	"syscall"
 	"unsafe"
 
@@ -77,7 +78,25 @@ var (
 	wndProcPtr     uintptr
 	networkCombo   uintptr
 	networkOptions []network.Option
+	usbStatusMu    sync.RWMutex
+	usbStatusText  = "USB / ADB: starting…"
+	nativeWindow   uintptr
 )
+
+func setNativeUSBStatus(state, detail string) {
+	usbStatusMu.Lock()
+	switch state {
+	case "connected": usbStatusText = "USB / ADB: connected — tunnel ready"
+	case "unauthorized": usbStatusText = "USB / ADB: authorize this PC on Android"
+	case "no_device": usbStatusText = "USB / ADB: connect phone + enable USB debugging"
+	case "adb_missing": usbStatusText = "USB / ADB: adb.exe not found beside app"
+	default: usbStatusText = "USB / ADB: " + detail
+	}
+	usbStatusMu.Unlock()
+	if nativeWindow != 0 {
+		user32.NewProc("InvalidateRect").Call(nativeWindow, 0, 1)
+	}
+}
 
 type point struct{ x, y int32 }
 
@@ -189,6 +208,7 @@ func createNativeWindow(wsURL string, options ...network.Option) bool {
 		log.Printf("create native window: %v", callErr)
 		return false
 	}
+	nativeWindow = hwnd
 	comboClass, _ := syscall.UTF16PtrFromString("COMBOBOX")
 	networkCombo, _, callErr = procCreateWindowExW.Call(
 		0, uintptr(unsafe.Pointer(comboClass)), 0,
@@ -389,6 +409,15 @@ func drawWindow(hwnd uintptr) {
 		uintptr(unsafe.Pointer(t2)), ^uintptr(0),
 		uintptr(unsafe.Pointer(&tr)),
 		dtSingleLine|dtCenter|dtVCenter)
+
+	usbStatusMu.RLock()
+	status := usbStatusText
+	usbStatusMu.RUnlock()
+	statusUTF, _ := syscall.UTF16PtrFromString(status)
+	tr = rect{0, tr.bottom + 6, cw, tr.bottom + 36}
+	procSetTextColor.Call(hdc, 0x0094ca3f)
+	procDrawTextW.Call(hdc, uintptr(unsafe.Pointer(statusUTF)), ^uintptr(0),
+		uintptr(unsafe.Pointer(&tr)), dtSingleLine|dtCenter|dtVCenter)
 
 }
 

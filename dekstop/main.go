@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -26,10 +27,8 @@ func main() {
 	flag.Parse()
 
 	options := network.Options(*port, *ipFlag)
-	if len(options) == 0 {
-		log.Fatal("No active network found. Connect Wi-Fi or LAN, then reopen the app.")
-	}
-	wsURL := options[0].URL
+	wsURL := fmt.Sprintf("ws://127.0.0.1:%d/ws", usbPort)
+	if len(options) > 0 { wsURL = options[0].URL }
 	for _, option := range options {
 		fmt.Printf("Network: %s (%s)\n", option.Label, option.URL)
 	}
@@ -38,7 +37,7 @@ func main() {
 	fmt.Printf("Virtual Barcode Bridge\n")
 	fmt.Printf("WebSocket endpoint: %s\n", wsURL)
 	fmt.Printf("Web UI:            %s\n", uiURL)
-	if !*noQR {
+	if !*noQR && len(options) > 0 {
 		fmt.Println("\nScan with your phone:")
 		if err := server.PrintQR(wsURL); err != nil {
 			log.Printf("QR render failed: %v", err)
@@ -46,6 +45,10 @@ func main() {
 	}
 
 	srv := server.New(keyboard.New(), wsURL, options...)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	usbTransport := startUSBTransport(ctx)
+	defer usbTransport.Close()
 
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
 	if err != nil {
@@ -58,6 +61,21 @@ func main() {
 			log.Fatalf("server: %v", err)
 		}
 	}()
+
+	// USB uses a loopback-only listener. ADB reverse carries device traffic to
+	// this socket, so it never requires an inbound Windows Firewall exception.
+	usbListener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", usbPort))
+	if err != nil {
+		log.Printf("USB listener unavailable: %v", err)
+	} else {
+		usbSrv := &http.Server{Handler: srv.Handler()}
+		defer usbSrv.Close()
+		go func() {
+			if err := usbSrv.Serve(usbListener); err != nil && err != http.ErrServerClosed {
+				log.Printf("USB server: %v", err)
+			}
+		}()
+	}
 
 	usingNative := false
 	if !*noNative {

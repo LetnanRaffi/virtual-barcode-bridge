@@ -1,8 +1,8 @@
 # Virtual Barcode Bridge
 
-Turn your phone into a wireless barcode scanner. Scan a barcode on your phone, it gets typed straight into whatever window is focused on your computer.
+Turn your phone into a Wi-Fi or USB barcode scanner. Scan a barcode on your phone, it gets typed straight into whatever window is focused on your computer.
 
-Bridge the gap between your POS/keyboard and a zero-infrastructure mobile scanner. No drivers, no installs, no servers, no internet required — just one file on the computer and one app on the phone, both on the same Wi-Fi.
+Bridge the gap between your POS/keyboard and a zero-infrastructure mobile scanner. LAN mode works on a shared network; USB mode uses an ADB tunnel and needs no LAN reachability, tethering, or inbound firewall rule.
 
 ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20Android-4f9dff)
 
@@ -12,7 +12,7 @@ Bridge the gap between your POS/keyboard and a zero-infrastructure mobile scanne
 2. Scan that QR with the Android app — it grabs the `ws://` address and connects automatically.
 3. Any barcode you scan on the phone is injected as keyboard input into the focused window on the computer (classic barcode-scanner behaviour: the cursor just lands where you need it).
 
-The Android app adds a per-scan cooldown (1–5 s, tunable) so you can swap items without re-scanning the same thing, plus portrait/landscape scanning modes and a scan log.
+The Android app adds a per-scan cooldown (1–5 s, tunable) so you can swap items without re-scanning the same thing, plus portrait/landscape scanning modes and a scan log. Its scanner uses continuous focus, tap metering, low-light exposure tuning, a wide analysis ROI, and a fast ZXing path with expensive recovery only after normal decoding misses.
 
 ## Downloads
 
@@ -30,6 +30,15 @@ All binaries are on the [releases page](https://github.com/LetnanRaffi/virtual-b
 3. A native window opens showing the QR code. Select the Wi-Fi or Ethernet adapter that your phone can reach; the QR updates automatically. Phone scan → connected → scan barcodes.
 
 No admin, no installation, no drivers.
+
+### USB / ADB mode
+
+1. Put Android Platform Tools (`adb.exe`, `AdbWinApi.dll`, and `AdbWinUsbApi.dll`) beside `vbb.exe`, or make `adb` available on `PATH`.
+2. Enable **Developer options → USB debugging** on Android and connect the cable.
+3. Start the desktop bridge and accept Android's computer authorization prompt.
+4. In the Android app choose **Connect via USB / ADB**.
+
+The desktop app detects disconnects, unauthorized devices, and reconnects. It configures `adb reverse tcp:8765 tcp:8765` automatically. The USB WebSocket listener binds only to `127.0.0.1`, so USB mode does not require an inbound Windows Firewall exception and does not change the PC's internet route.
 
 ### Quick start — Linux
 1. Run `./vbb` (needs `xdotool` installed: `sudo apt install xdotool`).

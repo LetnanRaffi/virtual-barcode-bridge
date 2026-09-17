@@ -53,3 +53,9 @@ func TestQR(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestUSBPortIsSeparateFromLANDefault(t *testing.T) {
+	if usbPort == 8080 {
+		t.Fatal("USB must use a separate loopback-only port")
+	}
+}

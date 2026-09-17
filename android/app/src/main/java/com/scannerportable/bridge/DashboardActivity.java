@@ -34,7 +34,7 @@ public class DashboardActivity extends AppCompatActivity implements Bridge.Liste
         Bridge.gapSeconds = prefs.getInt("gap", 2);
         enter.setChecked(Bridge.autoEnter);
 
-        urlView.setText(Bridge.url);
+        urlView.setText(Bridge.connectionLabel() + " · " + Bridge.url);
         enter.setOnCheckedChangeListener((b, v) -> {
             Bridge.autoEnter = v;
             prefs.edit().putBoolean("enter", v).apply();
@@ -90,9 +90,9 @@ public class DashboardActivity extends AppCompatActivity implements Bridge.Liste
     }
 
     private void refresh() {
-        statusView.setText(Bridge.connected ? "Online" : "Offline");
+        statusView.setText(Bridge.connected ? "Connected via " + Bridge.connectionLabel() : "Offline");
         statusView.setTextColor(Color.parseColor(Bridge.connected ? "#3fca94" : "#e06c5a"));
-        urlView.setText(Bridge.url);
+        urlView.setText(Bridge.connectionLabel() + " · " + Bridge.url);
         gapBtn.setText(Bridge.gapSeconds + "s");
 
         StringBuilder sb = new StringBuilder();

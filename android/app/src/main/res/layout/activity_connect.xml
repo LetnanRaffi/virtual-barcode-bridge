@@ -56,6 +56,32 @@
                 android:text="Scan QR to connect"
                 android:layout_marginTop="20dp" />
         </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/surface"
+            android:padding="20dp"
+            android:layout_marginTop="16dp">
+            <TextView
+                style="@style/Bridge.Heading"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="USB cable / ADB" />
+            <TextView
+                style="@style/Bridge.Body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Connect the cable, enable USB debugging, then authorize this computer. No Wi-Fi or USB tethering required."
+                android:layout_marginTop="8dp" />
+            <Button
+                android:id="@+id/connectUsb"
+                style="@style/Bridge.Button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Connect via USB / ADB"
+                android:layout_marginTop="16dp" />
+        </LinearLayout>
         <TextView
             style="@style/Bridge.Heading"
             android:layout_width="match_parent"

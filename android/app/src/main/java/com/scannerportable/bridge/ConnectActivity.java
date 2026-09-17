@@ -13,7 +13,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 public class ConnectActivity extends AppCompatActivity implements Bridge.Listener {
 
-    private Button scanQrBtn, connectBtn;
+    private Button scanQrBtn, connectBtn, usbBtn;
     private EditText urlField;
     private TextView hint;
 
@@ -24,6 +24,7 @@ public class ConnectActivity extends AppCompatActivity implements Bridge.Listene
 
         scanQrBtn  = findViewById(R.id.scanQr);
         connectBtn = findViewById(R.id.connect);
+        usbBtn      = findViewById(R.id.connectUsb);
         urlField   = findViewById(R.id.url);
         hint       = findViewById(R.id.hint);
 
@@ -36,6 +37,16 @@ public class ConnectActivity extends AppCompatActivity implements Bridge.Listene
             Intent i = new Intent(this, ScanActivity.class);
             i.putExtra("mode", "connect");
             startActivity(i);
+        });
+
+        usbBtn.setOnClickListener(v -> {
+            hint.setVisibility(TextView.VISIBLE);
+            hint.setTextColor(Color.parseColor("#e0b35a"));
+            hint.setText("Waiting for USB / ADB… Authorize this PC if Android asks.");
+            scanQrBtn.setEnabled(false);
+            connectBtn.setEnabled(false);
+            usbBtn.setEnabled(false);
+            Bridge.connectUsb();
         });
 
         connectBtn.setOnClickListener(v -> {
@@ -55,6 +66,7 @@ public class ConnectActivity extends AppCompatActivity implements Bridge.Listene
         hint.setText("Connecting to " + url + " …");
         scanQrBtn.setEnabled(false);
         connectBtn.setEnabled(false);
+        usbBtn.setEnabled(false);
         Bridge.connect(url);
     }
 
@@ -81,8 +93,11 @@ public class ConnectActivity extends AppCompatActivity implements Bridge.Listene
         if (isFinishing()) return;
         scanQrBtn.setEnabled(true);
         connectBtn.setEnabled(true);
+        usbBtn.setEnabled(true);
         hint.setTextColor(Color.parseColor("#e06c5a"));
-        hint.setText("Offline: " + reason);
+        hint.setText(Bridge.mode == Bridge.Mode.USB
+            ? "Waiting for USB / ADB… " + reason
+            : "Offline: " + reason);
     }
 
     private void openDashboard() {

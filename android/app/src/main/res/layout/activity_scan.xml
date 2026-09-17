@@ -58,4 +58,19 @@
         android:src="@drawable/ic_flash_off"
         android:scaleType="centerInside"
         android:padding="16dp" />
+    <TextView
+        android:id="@+id/low_light_hint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="28dp"
+        android:background="@drawable/camera_control"
+        android:paddingStart="16dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="10dp"
+        android:text="Low light — tap the torch"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:visibility="gone" />
 </FrameLayout>
