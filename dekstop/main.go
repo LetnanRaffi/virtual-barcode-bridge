@@ -52,7 +52,7 @@ func main() {
 	fmt.Printf("ScanBridge\n")
 	fmt.Printf("WebSocket endpoint: %s\n", wsURL)
 	fmt.Printf("Web UI:            %s\n", uiURL)
-	if !*noQR {
+	if !*noQR && len(options) > 0 {
 		fmt.Println("\nScan with your phone:")
 		if err := server.PrintQR(wsURL); err != nil {
 			log.Printf("QR render failed: %v", err)
@@ -60,7 +60,6 @@ func main() {
 	}
 
 	srv := server.New(keyboard.New(), wsURL, options...)
-
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
 	if err != nil {
 		fatalDesktop(fmt.Sprintf("Port %d tidak tersedia: %v", *port, err))

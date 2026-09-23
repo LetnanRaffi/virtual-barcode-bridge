@@ -13,6 +13,7 @@ Connect over a USB cable with ADB, or use Wi-Fi/LAN or Android USB tethering. Th
 3. Any barcode you scan on the phone is injected as keyboard input into the focused window on the computer (classic barcode-scanner behaviour: the cursor just lands where you need it).
 
 The Android app uses CameraX and ML Kit for continuous scanning. It has a configurable duplicate cooldown, connection recovery, scan acknowledgements, and a compact recent-scan card.
+For more reliable scans, retail EAN/UPC values pass their check digit and every result must agree across multiple camera frames. **Scan miring** widens the aiming area for diagonal labels; Indonesian is the default Android UI language.
 
 ## Downloads
 

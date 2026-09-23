@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	"virtual-barcode-bridge/server"
 	"virtual-barcode-bridge/network"
+	"virtual-barcode-bridge/server"
 )
 
 func TestPayloadUnmarshal(t *testing.T) {
