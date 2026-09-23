@@ -1,12 +1,15 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -35,12 +38,17 @@ func main() {
 	noBrowser := flag.Bool("no-browser", false, "don't auto-open the browser")
 	noNative := flag.Bool("no-native", false, "don't open the native status window (Windows)")
 	flag.Parse()
+	secret, err := newPairingSecret()
+	if err != nil {
+		fatalDesktop(fmt.Sprintf("Cannot create pairing code: %v", err))
+	}
 
 	options, discoveryErr := network.Discover(*port, *ipFlag)
 	if discoveryErr != nil {
 		log.Printf("network discovery failed: %v", discoveryErr)
 	}
-	wsURL := fmt.Sprintf("ws://127.0.0.1:%d/ws", *port)
+	options = pairedOptions(options, secret)
+	wsURL := withPairing(fmt.Sprintf("ws://127.0.0.1:%d/ws", *port), secret)
 	if len(options) > 0 {
 		wsURL = options[0].URL
 	}
@@ -77,7 +85,7 @@ func main() {
 			log.Fatalf("server: %v", err)
 		}
 	}()
-	go refreshNetworks(srv, *port, *ipFlag, options)
+	go refreshNetworks(srv, *port, *ipFlag, secret, options)
 
 	usingNative := false
 	if !*noNative {
@@ -101,7 +109,41 @@ func main() {
 
 func localRequest(r *http.Request) bool {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	return err == nil && net.ParseIP(host).IsLoopback()
+	if err != nil || net.ParseIP(host) == nil || !net.ParseIP(host).IsLoopback() {
+		return false
+	}
+	requestHost := r.Host
+	if name, _, err := net.SplitHostPort(requestHost); err == nil {
+		requestHost = name
+	}
+	return requestHost == "localhost" || (net.ParseIP(requestHost) != nil && net.ParseIP(requestHost).IsLoopback())
+}
+
+func newPairingSecret() (string, error) {
+	data := make([]byte, 24)
+	if _, err := rand.Read(data); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(data), nil
+}
+
+func withPairing(endpoint, secret string) string {
+	parsed, err := url.Parse(endpoint)
+	if err != nil {
+		return endpoint
+	}
+	query := parsed.Query()
+	query.Set("pair", secret)
+	parsed.RawQuery = query.Encode()
+	return parsed.String()
+}
+
+func pairedOptions(options []network.Option, secret string) []network.Option {
+	paired := append([]network.Option(nil), options...)
+	for i := range paired {
+		paired[i].URL = withPairing(paired[i].URL, secret)
+	}
+	return paired
 }
 
 // USB control is limited to local desktop browsers, not clients on the LAN.
@@ -161,7 +203,7 @@ func handleUSBControl(w http.ResponseWriter, r *http.Request) {
 
 // refreshNetworks makes adapters added after startup (for example Android USB
 // tethering) selectable from the web UI without adding a protocol or listener.
-func refreshNetworks(srv *server.Server, port int, override string, current []network.Option) {
+func refreshNetworks(srv *server.Server, port int, override, secret string, current []network.Option) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for range ticker.C {
@@ -170,6 +212,7 @@ func refreshNetworks(srv *server.Server, port int, override string, current []ne
 			log.Printf("network discovery refresh failed: %v", err)
 			continue
 		}
+		options = pairedOptions(options, secret)
 		if reflect.DeepEqual(current, options) {
 			continue
 		}

@@ -12,12 +12,12 @@ Connect over a USB cable with ADB, or use Wi-Fi/LAN or Android USB tethering. Th
 2. For USB, plug in the phone and open the Android app; for network, scan the QR code.
 3. Any barcode you scan on the phone is injected as keyboard input into the focused window on the computer (classic barcode-scanner behaviour: the cursor just lands where you need it).
 
-The Android app uses CameraX and ML Kit for continuous scanning. It has a configurable duplicate cooldown, connection recovery, scan acknowledgements, and a compact recent-scan card.
+The Android app uses CameraX and ML Kit for continuous scanning. It has a configurable duplicate cooldown, connection recovery, scan acknowledgements, a compact recent-scan card, and manual barcode entry when a damaged or reflective label cannot be decoded.
 For more reliable scans, retail EAN/UPC values pass their check digit and every result must agree across multiple camera frames. **Scan miring** widens the aiming area for diagonal labels; Indonesian is the default Android UI language.
 
 ## Downloads
 
-Current local development builds are in `dist/`. Published files on the [releases page](https://github.com/LetnanRaffi/virtual-barcode-bridge/releases/latest) may be older until a new release is uploaded.
+Current local development builds are in `dist/`. Download the matching desktop and Android builds from the [latest release](https://github.com/LetnanRaffi/virtual-barcode-bridge/releases/latest).
 
 | File | Platform | Size |
 |---|---|---|
@@ -42,7 +42,7 @@ Wayland keyboard injection is not supported yet. If ADB sees no phone, run `adb 
 ### Android app
 1. Install `ScanBridge-debug.apk` on the phone.
 2. Choose **USB** for an automatic cable connection, or **Wi-Fi** to scan the desktop QR.
-3. Once connected, tap **Start scanning**. The desktop confirms whether each barcode was typed successfully.
+3. Once connected, tap **Mulai memindai**. The desktop confirms whether each barcode was typed successfully. If a label cannot be read, tap **Ketik barcode manual** and check the value before sending.
 
 ### USB Cable / USB Tethering
 
@@ -52,7 +52,7 @@ This alternative USB cable mode uses Android USB tethering, which creates a loca
 2. Enable **USB tethering** in Android Settings (usually under Network/Connections → Hotspot & tethering).
 3. Start ScanBridge on the desktop. It continues to listen on port 8080 across its active local adapters.
 4. Choose the tethering adapter in the desktop selector. It may be labeled **Likely USB/Tethering** when the operating system exposes a recognizable adapter name; otherwise match the adapter name and IPv4 address shown by your OS.
-5. Scan its QR code in the Android app, or enter the displayed `ws://...:8080/ws` address manually.
+5. Scan its QR code in the Android app, or enter the complete displayed `ws://...:8080/ws?pair=...` address manually.
 6. Scan barcodes normally.
 
 If tethering is enabled after the bridge starts, the native Windows window and embedded web UI at `http://localhost:8080` refresh their adapter lists within a few seconds.
@@ -94,12 +94,14 @@ export ANDROID_HOME=$HOME/Android/Sdk
 └────────────┘               └────────────────────┘   Linux)      └──────────────┘
 ```
 
-- WebSocket endpoint: `ws://<ip>:8080/ws` (LAN) or forwarded `ws://127.0.0.1:8080/ws` (USB)
+- WebSocket endpoint: `ws://<ip>:8080/ws?pair=<session-code>` (LAN) or forwarded `ws://127.0.0.1:8080/ws` (USB)
 - New Android scans use `barcode` messages with a unique ID; desktop replies `barcode_ack`. Legacy `scan` messages remain accepted.
 - Keyboard injection: `SendInput` on Windows, `xdotool` on Linux
 - Web UI (embedded, no assets on disk): QR, live scan log, manual test inject
 
 If the computer has Wi-Fi, Ethernet, and/or USB tethering, use the network selector above the QR. Each choice shows a probable adapter type, its OS adapter name, and IPv4 address. The default follows the computer's outgoing route. The web UI and Windows native window refresh newly added or removed adapters while the bridge runs.
+
+The desktop generates a new pairing code each time it starts. A LAN client needs the complete QR URL, while USB ADB continues to work over localhost without a code. The desktop web UI, QR image, activity log, and test-injection endpoint are accessible only from the desktop itself. Use Wi-Fi mode on a trusted local network: its `ws://` traffic is not encrypted against someone who can observe that network.
 
 ## Options
 

@@ -2,15 +2,19 @@
 package server
 
 import (
+	"crypto/subtle"
 	_ "embed"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gorilla/websocket"
 	"github.com/skip2/go-qrcode"
@@ -86,20 +90,25 @@ func (h *monitorHub) emit(kind, format string, args ...any) {
 }
 
 type Server struct {
-	kb        keyboard.Injector
-	mu        sync.Mutex
-	optionsMu sync.RWMutex
-	monitor   *monitorHub
-	qrPNG     []byte
-	wsURL     string
-	options   []network.Option
-	ackMu     sync.Mutex
-	seen      map[string]barcodeAck
-	seenOrder []string
+	kb           keyboard.Injector
+	mu           sync.Mutex
+	optionsMu    sync.RWMutex
+	monitor      *monitorHub
+	qrPNG        []byte
+	wsURL        string
+	options      []network.Option
+	ackMu        sync.Mutex
+	seen         map[string]barcodeAck
+	seenOrder    []string
+	pairingToken string
 }
 
 func New(kb keyboard.Injector, wsURL string, options ...network.Option) *Server {
+	parsed, _ := url.Parse(wsURL)
 	s := &Server{kb: kb, monitor: newMonitorHub(), wsURL: wsURL, options: options, seen: make(map[string]barcodeAck)}
+	if parsed != nil {
+		s.pairingToken = parsed.Query().Get("pair")
+	}
 	if q, err := qrcode.New(wsURL, qrcode.Medium); err == nil {
 		s.qrPNG, _ = q.PNG(384)
 	}
@@ -108,20 +117,47 @@ func New(kb keyboard.Injector, wsURL string, options ...network.Option) *Server 
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", s.handleIndex)
-	mux.HandleFunc("/qr.png", s.handleQR)
-	mux.HandleFunc("/networks", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/", localOnly(s.handleIndex))
+	mux.HandleFunc("/qr.png", localOnly(s.handleQR))
+	mux.HandleFunc("/networks", localOnly(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(s.Networks())
-	})
+	}))
 	mux.HandleFunc("/ws", s.handleWS)
-	mux.HandleFunc("/monitor", s.handleMonitor)
-	mux.HandleFunc("/inject", s.handleInject)
+	mux.HandleFunc("/monitor", localOnly(s.handleMonitor))
+	mux.HandleFunc("/inject", localOnly(s.handleInject))
 	return mux
 }
 
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(*http.Request) bool { return true },
+	CheckOrigin: func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		return origin == "" || (isLoopback(r.RemoteAddr) && isLocalHost(r.Host) && origin == "http://"+r.Host)
+	},
+}
+
+func isLoopback(address string) bool {
+	host, _, err := net.SplitHostPort(address)
+	ip := net.ParseIP(host)
+	return err == nil && ip != nil && ip.IsLoopback()
+}
+
+func isLocalHost(address string) bool {
+	host := address
+	if name, _, err := net.SplitHostPort(address); err == nil {
+		host = name
+	}
+	return strings.EqualFold(host, "localhost") || (net.ParseIP(host) != nil && net.ParseIP(host).IsLoopback())
+}
+
+func localOnly(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !isLoopback(r.RemoteAddr) || !isLocalHost(r.Host) {
+			http.Error(w, "local access only", http.StatusForbidden)
+			return
+		}
+		next(w, r)
+	}
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
@@ -172,12 +208,18 @@ func (s *Server) Networks() []network.Option {
 }
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
+	if !isLoopback(r.RemoteAddr) && (s.pairingToken == "" ||
+		subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("pair")), []byte(s.pairingToken)) != 1) {
+		http.Error(w, "pairing required; scan the computer QR again", http.StatusUnauthorized)
+		return
+	}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		s.monitor.emit("error", "upgrade failed from %s: %v", r.RemoteAddr, err)
 		return
 	}
 	defer conn.Close()
+	conn.SetReadLimit(4096)
 	computerName, _ := os.Hostname()
 	if err := conn.WriteJSON(map[string]string{"type": "hello", "app": "vbb", "name": computerName}); err != nil {
 		return
@@ -202,11 +244,11 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		}
 		switch p.Type {
 		case "scan":
-			if p.Data != "" {
+			if validBarcodeValue(p.Data) {
 				s.inject(p.Data, autoEnter, a)
 			}
 		case "barcode":
-			if p.ID == "" || p.Value == "" {
+			if p.ID == "" {
 				continue
 			}
 			if err := conn.WriteJSON(s.injectBarcode(p, autoEnter, a)); err != nil {
@@ -225,7 +267,9 @@ func (s *Server) injectBarcode(p Payload, autoEnter bool, source string) barcode
 		return previous
 	}
 	ack := barcodeAck{Type: "barcode_ack", ID: p.ID, Value: p.Value}
-	if err := s.inject(p.Value, autoEnter, source); err != nil {
+	if !validBarcodeValue(p.Value) || len(p.ID) > 128 {
+		ack.Error = "invalid barcode value or scan ID"
+	} else if err := s.inject(p.Value, autoEnter, source); err != nil {
 		ack.Error = err.Error()
 	} else {
 		ack.Success = true
@@ -239,9 +283,29 @@ func (s *Server) injectBarcode(p Payload, autoEnter bool, source string) barcode
 	return ack
 }
 
+func validBarcodeValue(value string) bool {
+	if strings.TrimSpace(value) == "" || utf8.RuneCountInString(value) > 256 {
+		return false
+	}
+	for _, character := range value {
+		if character < 32 || character == 127 {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Server) handleInject(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if origin := r.Header.Get("Origin"); origin != "http://"+r.Host {
+		http.Error(w, "same origin required", http.StatusForbidden)
+		return
+	}
 	var p Payload
-	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&p); err != nil {
 		http.Error(w, "bad json", http.StatusBadRequest)
 		return
 	}
@@ -249,8 +313,8 @@ func (s *Server) handleInject(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad type", http.StatusBadRequest)
 		return
 	}
-	if p.Data == "" {
-		http.Error(w, "empty data", http.StatusBadRequest)
+	if !validBarcodeValue(p.Data) {
+		http.Error(w, "invalid barcode value", http.StatusBadRequest)
 		return
 	}
 	autoEnter := true

@@ -16,6 +16,7 @@ import com.raffitech.scanbridge.model.RecentScan
 import com.raffitech.scanbridge.model.ScanSettings
 import com.raffitech.scanbridge.model.ScannerState
 import com.raffitech.scanbridge.model.TransportType
+import com.raffitech.scanbridge.model.validManualBarcode
 import com.raffitech.scanbridge.network.BridgeSocket
 import java.net.URI
 import kotlinx.coroutines.Job
@@ -126,30 +127,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun beginScanning() { _scanner.value = ScannerState.Scanning }
 
-    fun onBarcode(value: String) {
-        if (value.isBlank() || _scanner.value is ScannerState.Sending || _scanner.value is ScannerState.Failed) return
+    fun onBarcode(value: String) { submitBarcode(value, manual = false) }
+
+    fun sendManualBarcode(raw: String): Boolean {
+        val value = raw.trim()
+        return validManualBarcode(value) && submitBarcode(value, manual = true)
+    }
+
+    private fun submitBarcode(value: String, manual: Boolean): Boolean {
+        if (value.isBlank() || _scanner.value is ScannerState.Sending || (!manual && _scanner.value is ScannerState.Failed)) return false
         val now = System.currentTimeMillis()
-        if (value == lastCode && now - lastCodeAt < _settings.value.cooldownSeconds * 1000L) return
-        if (!_settings.value.continuous && _scanner.value is ScannerState.Sent) return
+        if (value == lastCode && now - lastCodeAt < _settings.value.cooldownSeconds * 1000L) return false
+        if (!manual && !_settings.value.continuous && _scanner.value is ScannerState.Sent) return false
+        _scanner.value = ScannerState.Sending(value)
+        val id = bridge.send(value)
+        if (id == null) {
+            _recent.value = RecentScan(value, now, false, "Antrean penuh atau komputer belum dipilih")
+            _scanner.value = ScannerState.Failed(value, "Antrean penuh atau komputer belum dipilih")
+            return false
+        }
         lastCode = value
         lastCodeAt = now
-        _scanner.value = ScannerState.BarcodeDetected(value)
         if (_settings.value.vibration) vibrate()
-        val id = bridge.send(value)
-        _scanner.value = if (id == null) {
-            _recent.value = RecentScan(value, now, false, "Antrean penuh atau komputer belum dipilih")
-            ScannerState.Failed(value, "Antrean penuh atau komputer belum dipilih")
-        } else {
-            ScannerState.Sending(value)
-        }
+        return true
     }
 
     fun scanAgain() { _scanner.value = ScannerState.Scanning }
 
     fun retryFailed() {
         val failed = _scanner.value as? ScannerState.Failed ?: return
-        _scanner.value = if (bridge.send(failed.value) != null) ScannerState.Sending(failed.value)
-        else ScannerState.Failed(failed.value, "Masih menunggu komputer atau ruang antrean")
+        _scanner.value = ScannerState.Sending(failed.value)
+        if (bridge.send(failed.value) == null) {
+            _scanner.value = ScannerState.Failed(failed.value, "Masih menunggu komputer atau ruang antrean")
+        }
     }
 
     fun updateSettings(value: ScanSettings) {

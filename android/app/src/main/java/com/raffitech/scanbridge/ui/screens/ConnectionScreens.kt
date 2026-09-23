@@ -205,12 +205,12 @@ fun WifiScreen(vm: MainViewModel, onBack: () -> Unit) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 36.dp)) {
             Text("Alamat komputer", style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(8.dp))
-            Text("Alamat ini terlihat di bawah kode QR komputer.", color = TextSecondary)
+            Text("Salin alamat lengkap di bawah QR komputer, termasuk kode pasangan setelah /ws.", color = TextSecondary)
             Spacer(Modifier.height(20.dp))
             OutlinedTextField(
                 value = address, onValueChange = { address = it; vm.clearMessage() },
                 label = { Text("Alamat komputer") },
-                placeholder = { Text("ws://192.168.1.2:8080/ws") },
+                placeholder = { Text("ws://192.168.1.2:8080/ws?pair=...") },
                 singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                 modifier = Modifier.fillMaxWidth(), isError = message != null,
             )

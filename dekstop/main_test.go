@@ -3,11 +3,41 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"virtual-barcode-bridge/network"
 	"virtual-barcode-bridge/server"
 )
+
+func TestPairingURLsUseOneSecret(t *testing.T) {
+	secret, err := newPairingSecret()
+	if err != nil || len(secret) < 24 {
+		t.Fatalf("pairing secret: %q %v", secret, err)
+	}
+	options := pairedOptions([]network.Option{{Label: "Wi-Fi", URL: "ws://192.168.1.2:8080/ws"}}, secret)
+	if len(options) != 1 || !strings.HasSuffix(options[0].URL, "?pair="+secret) {
+		t.Fatalf("paired options: %+v", options)
+	}
+}
+
+func TestUSBControlLocalHostCheck(t *testing.T) {
+	r := httptest.NewRequest("GET", "http://localhost:8080/usb/status", nil)
+	r.RemoteAddr = "127.0.0.1:12345"
+	if !localRequest(r) {
+		t.Fatal("localhost request rejected")
+	}
+	r.Host = "evil.example"
+	if localRequest(r) {
+		t.Fatal("DNS rebinding Host accepted")
+	}
+	r.Host = "localhost:8080"
+	r.RemoteAddr = "192.168.1.9:12345"
+	if localRequest(r) {
+		t.Fatal("LAN request accepted")
+	}
+}
 
 func TestPayloadUnmarshal(t *testing.T) {
 	data := []byte(`{"type":"scan","data":"ABC123","auto_enter":false}`)

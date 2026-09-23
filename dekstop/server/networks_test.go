@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
@@ -18,21 +19,21 @@ func TestNetworkQRSelection(t *testing.T) {
 	}
 	handler := New(nil, options[0].URL, options...).Handler()
 	list := httptest.NewRecorder()
-	handler.ServeHTTP(list, httptest.NewRequest("GET", "/networks", nil))
+	handler.ServeHTTP(list, localRequest("GET", "/networks"))
 	var got []network.Option
 	if err := json.Unmarshal(list.Body.Bytes(), &got); err != nil || len(got) != 2 || got[1] != options[1] {
 		t.Fatalf("network choices: %s (%v)", list.Body.String(), err)
 	}
 	for _, option := range options {
 		response := httptest.NewRecorder()
-		handler.ServeHTTP(response, httptest.NewRequest("GET", "/qr.png?endpoint="+url.QueryEscape(option.URL), nil))
+		handler.ServeHTTP(response, localRequest("GET", "/qr.png?endpoint="+url.QueryEscape(option.URL)))
 		want, _ := qrcode.Encode(option.URL, qrcode.Medium, 384)
 		if response.Code != 200 || !bytes.Equal(response.Body.Bytes(), want) {
 			t.Fatalf("wrong QR for %s: status %d", option.Label, response.Code)
 		}
 	}
 	bad := httptest.NewRecorder()
-	handler.ServeHTTP(bad, httptest.NewRequest("GET", "/qr.png?endpoint=ws://unknown/ws", nil))
+	handler.ServeHTTP(bad, localRequest("GET", "/qr.png?endpoint=ws://unknown/ws"))
 	if bad.Code != 400 {
 		t.Fatalf("unknown network accepted: %d", bad.Code)
 	}
@@ -45,7 +46,7 @@ func TestNetworkOptionsCanRefreshWithoutRestartingServer(t *testing.T) {
 	s.UpdateNetworks(updated)
 
 	list := httptest.NewRecorder()
-	s.Handler().ServeHTTP(list, httptest.NewRequest("GET", "/networks", nil))
+	s.Handler().ServeHTTP(list, localRequest("GET", "/networks"))
 	var got []network.Option
 	if err := json.Unmarshal(list.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
@@ -55,8 +56,15 @@ func TestNetworkOptionsCanRefreshWithoutRestartingServer(t *testing.T) {
 	}
 
 	qr := httptest.NewRecorder()
-	s.Handler().ServeHTTP(qr, httptest.NewRequest("GET", "/qr.png?endpoint="+url.QueryEscape(updated[0].URL), nil))
+	s.Handler().ServeHTTP(qr, localRequest("GET", "/qr.png?endpoint="+url.QueryEscape(updated[0].URL)))
 	if qr.Code != 200 {
 		t.Fatalf("updated endpoint QR status = %d", qr.Code)
 	}
+}
+
+func localRequest(method, target string) *http.Request {
+	r := httptest.NewRequest(method, target, nil)
+	r.RemoteAddr = "127.0.0.1:12345"
+	r.Host = "localhost:8080"
+	return r
 }

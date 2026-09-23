@@ -9,11 +9,13 @@ The app uses Kotlin, Compose, CameraX, bundled ML Kit barcode scanning, OkHttp W
 ## Connect
 
 - USB: run the updated ScanBridge `vbb.exe` on Windows, choose USB, connect the phone, enable USB debugging, and approve the computer. On the phone choose USB. The desktop configures `adb reverse tcp:8080 tcp:8080`; the app uses `ws://127.0.0.1:8080/ws`.
-- Wi-Fi/LAN: choose a reachable adapter on the desktop, then scan its QR in the app. The QR contains a `ws://<computer-ip>:8080/ws` URL. Manual address entry is inside the Wi-Fi screen.
+- Wi-Fi/LAN: choose a reachable adapter on the desktop, then scan its QR in the app. The QR contains the complete `ws://<computer-ip>:8080/ws?pair=<session-code>` URL. Manual address entry is inside the Wi-Fi screen; copy the complete URL, including its pairing code. The code changes when the desktop restarts, so scan its new QR if reconnecting fails.
 
 The desktop sends a `hello` message with its computer name. Each barcode gets a unique ID and a `barcode_ack` after desktop keyboard injection. Unacknowledged IDs are retried on the current connection and after reconnect; the desktop caches acknowledgements to prevent the same ID being typed twice. A failed acknowledgement is shown in the scanner, where the user can choose to retry with a new ID.
 
 Camera permission is requested when a camera screen is opened. On small phones the method, USB, connected, and settings screens scroll; camera controls stay above system bars using safe insets.
+
+If a barcode cannot be decoded, tap **Ketik barcode manual** on the scanner screen, verify the typed value, and send it through the same acknowledged connection. This is an explicit fallback; it does not relax camera scan validation.
 
 ## Pemindaian akurat
 

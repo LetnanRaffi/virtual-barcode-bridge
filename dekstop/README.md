@@ -60,7 +60,7 @@ Opens automatically at `http://localhost:8080`:
 
 ## WebSocket Protocol
 
-Connect any WebSocket client to `ws://<YOUR_LAN_IP>:8080/ws`.
+Connect a LAN WebSocket client to the complete QR URL, `ws://<YOUR_LAN_IP>:8080/ws?pair=<session-code>`. The code is random for each desktop run; scan the new QR after a restart. The ADB-reversed localhost URL does not need the code. Keep Wi-Fi mode on a trusted LAN because `ws://` does not encrypt traffic.
 
 Send JSON:
 ```json
@@ -83,3 +83,5 @@ The bridge types `BARCODE_VALUE` into the focused window and presses Enter, then
 | `/ws` | WebSocket | Phone scanner connects here |
 | `/monitor` | WebSocket | Web UI log stream |
 | `/inject` | POST | Test injection: `{"type":"scan","data":"...","auto_enter":true}` |
+
+The web UI, QR, activity stream, and test-injection endpoint are local-desktop only. LAN clients may access `/ws` only with the current pairing code.

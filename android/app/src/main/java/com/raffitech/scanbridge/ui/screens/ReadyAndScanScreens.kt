@@ -16,11 +16,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,6 +38,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -55,6 +58,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -148,7 +152,7 @@ fun ReadyScreen(vm: MainViewModel, onScan: () -> Unit, onDisconnect: () -> Unit)
     }
 
     if (showSettings) ModalBottomSheet(onDismissRequest = { showSettings = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 36.dp)) {
+        Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 36.dp)) {
             Text("Pengaturan pemindaian", style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(18.dp))
             SettingToggle("Pindai terus-menerus", settings.continuous) { vm.updateSettings(settings.copy(continuous = it)) }
@@ -193,16 +197,20 @@ private fun ConnectionIllustration() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BarcodeScreen(vm: MainViewModel, onBack: () -> Unit) {
     val connection by vm.connection.collectAsStateWithLifecycle()
     val scanner by vm.scanner.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     var torch by remember { mutableStateOf(false) }
+    var manualSheet by remember { mutableStateOf(false) }
+    var manualValue by remember { mutableStateOf("") }
+    var manualError by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize().background(Background)) {
         CameraPermissionGate {
             Box(Modifier.fillMaxSize()) {
-                BarcodeCamera(CameraMode.BARCODE, torch, vm::onBarcode, Modifier.fillMaxSize(), angledScan = settings.angledScan)
+                BarcodeCamera(CameraMode.BARCODE, torch, { if (!manualSheet) vm.onBarcode(it) }, Modifier.fillMaxSize(), angledScan = settings.angledScan)
                 ScannerFrame(success = scanner is ScannerState.Sent, angled = settings.angledScan)
             }
         }
@@ -225,6 +233,11 @@ fun BarcodeScreen(vm: MainViewModel, onBack: () -> Unit) {
             if (connection !is ConnectionState.Connected) {
                 StatusPill("Koneksi terputus · menghubungkan ulang", false)
                 Spacer(Modifier.height(12.dp))
+            }
+            TextButton(onClick = { manualSheet = true; manualError = false }, modifier = Modifier.align(Alignment.End)) {
+                Icon(ScanIcons.Keyboard, contentDescription = null, tint = TextPrimary)
+                Spacer(Modifier.width(8.dp))
+                Text("Ketik barcode manual", color = TextPrimary)
             }
             SurfacePanel(Modifier.fillMaxWidth()) {
                 Column {
@@ -257,6 +270,32 @@ fun BarcodeScreen(vm: MainViewModel, onBack: () -> Unit) {
                 }
             }
             Spacer(Modifier.height(16.dp))
+        }
+    }
+    if (manualSheet) ModalBottomSheet(onDismissRequest = { manualSheet = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 36.dp)) {
+            Text("Ketik barcode manual", style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(8.dp))
+            Text("Untuk label yang silau atau tidak terbaca. Periksa nilainya sebelum mengirim.", color = TextSecondary)
+            Spacer(Modifier.height(18.dp))
+            OutlinedTextField(
+                value = manualValue,
+                onValueChange = { manualValue = it; manualError = false },
+                label = { Text("Nomor atau kode barcode") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                isError = manualError,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (manualError) Text("Nilai tidak valid, masih dalam jeda, atau menunggu konfirmasi komputer.", color = Error, modifier = Modifier.padding(top = 8.dp))
+            Spacer(Modifier.height(20.dp))
+            PrimaryAction("Kirim ke komputer", enabled = manualValue.isNotBlank(), onClick = {
+                if (vm.sendManualBarcode(manualValue)) {
+                    manualSheet = false
+                    manualValue = ""
+                    manualError = false
+                } else manualError = true
+            })
         }
     }
 }
