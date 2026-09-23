@@ -9,9 +9,14 @@ internal class ScanConfidence {
     private var count = 0
     private var firstSeenAt = 0L
     private var emittedAt = 0L
+    private var latchedValue: String? = null
+    private var missingSince = 0L
 
     fun observe(raw: String, barcodeFormat: Int, now: Long): String? {
         if (!validCode(raw, barcodeFormat)) return null
+        missingSince = 0L
+        if (latchedValue == raw) return null
+        if (latchedValue != null) latchedValue = null
         if (value != raw || format != barcodeFormat || now - firstSeenAt > 1500L) {
             value = raw
             format = barcodeFormat
@@ -26,9 +31,19 @@ internal class ScanConfidence {
         }
         if (count < required || now - emittedAt < 900L) return null
         emittedAt = now
+        latchedValue = raw
         count = 0
         firstSeenAt = now
         return raw
+    }
+
+    fun miss(now: Long) {
+        if (missingSince == 0L) missingSince = now
+        if (now - missingSince >= 800L) {
+            latchedValue = null
+            value = null
+            count = 0
+        }
     }
 
     private fun validCode(raw: String, format: Int): Boolean = when (format) {

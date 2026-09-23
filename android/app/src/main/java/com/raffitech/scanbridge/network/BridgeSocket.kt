@@ -91,11 +91,11 @@ class BridgeSocket {
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                lost(epoch, webSocket, t.message ?: "Connection failed")
+                lost(epoch, webSocket, t.message ?: "Koneksi gagal")
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                lost(epoch, webSocket, if (reason.isBlank()) "Connection lost" else reason)
+                lost(epoch, webSocket, if (reason.isBlank()) "Koneksi terputus" else reason)
             }
         })
         scope.launch {
@@ -103,7 +103,7 @@ class BridgeSocket {
             synchronized(lock) {
                 if (epoch == generation && (_state.value is ConnectionState.Connecting || _state.value is ConnectionState.ComputerFound)) {
                     socket?.cancel()
-                    lost(epoch, socket, "Computer did not respond")
+                    lost(epoch, socket, "Komputer tidak merespons")
                 }
             }
         }

@@ -33,4 +33,15 @@ class ScanConfidenceTest {
         val confidence = ScanConfidence()
         repeat(4) { index -> assertNull(confidence.observe("ABC\n123", Barcode.FORMAT_CODE_128, 1000 + index * 100L)) }
     }
+
+    @Test fun sameBarcodeNeedsToLeaveViewBeforeAnotherScan() {
+        val confidence = ScanConfidence()
+        assertNull(confidence.observe("4006381333931", Barcode.FORMAT_EAN_13, 1000))
+        assertEquals("4006381333931", confidence.observe("4006381333931", Barcode.FORMAT_EAN_13, 1100))
+        assertNull(confidence.observe("4006381333931", Barcode.FORMAT_EAN_13, 3200))
+        confidence.miss(3300)
+        confidence.miss(4200)
+        assertNull(confidence.observe("4006381333931", Barcode.FORMAT_EAN_13, 4300))
+        assertEquals("4006381333931", confidence.observe("4006381333931", Barcode.FORMAT_EAN_13, 4400))
+    }
 }

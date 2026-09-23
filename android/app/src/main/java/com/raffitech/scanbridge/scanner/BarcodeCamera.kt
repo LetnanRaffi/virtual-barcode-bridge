@@ -169,6 +169,7 @@ fun BarcodeCamera(mode: CameraMode, torch: Boolean, onCode: (String) -> Unit, mo
                                     val raw = barcode?.rawValue
                                     val code = if (raw == null) null else if (mode == CameraMode.QR) raw
                                         else confidence.observe(raw, barcode.format, SystemClock.elapsedRealtime())
+                                    if (raw == null && mode == CameraMode.BARCODE) confidence.miss(SystemClock.elapsedRealtime())
                                     if (code != null) main.post { if (active.get()) currentOnCode(code) }
                                 }
                                 .addOnCompleteListener {
