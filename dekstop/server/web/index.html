@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Virtual Barcode Bridge</title>
+<title>ScanBridge</title>
 <style>
   :root {
     --bg: #0f1115;
@@ -46,6 +46,15 @@
   .endpoint button { background: var(--accent); color: #081018; border: 0; border-radius: 8px; padding: 8px 4px; width: 74px; cursor: pointer; font-weight: 650; }
   .endpoint button:hover { filter: brightness(1.08); }
   .hint { color: var(--muted); font-size: 13px; margin-top: 10px; }
+  #usbPanel { display: none; }
+  .usb-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .usb-actions button, .usb-actions select { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 9px 12px; font: inherit; }
+  .usb-actions button { cursor: pointer; }
+  .usb-actions button.active { background: var(--accent); color: #081018; border-color: var(--accent); }
+  #usbDevices { max-width: 100%; }
+  #usbState { margin-top: 12px; color: var(--muted); }
+  #usbState.ready { color: var(--ok); }
+  #usbState.error { color: var(--err); }
   #inject { display: flex; gap: 10px; flex-wrap: wrap; }
   #inject input[type=text] {
     flex: 1; min-width: 200px; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
@@ -75,7 +84,7 @@
 </head>
 <body>
 <header>
-  <h1>Virtual Barcode Bridge</h1>
+  <h1>ScanBridge</h1>
   <span class="status"><span class="dot"></span>running</span>
 </header>
 
@@ -85,14 +94,24 @@
     <div>
       <h2>Connect scanner</h2>
       <p class="hint" style="margin:0 0 4px">Choose the network your phone can reach, then scan using the Android app:</p>
-      <label for="network">Wi-Fi / LAN</label>
+      <label for="network">Reachable network</label>
       <select id="network" style="display:block;width:100%;padding:8px;margin-top:6px" aria-label="Network"></select>
       <div class="endpoint">
         <code id="wsurl">__WS_URL__</code>
         <button id="copy">Copy</button>
       </div>
-      <p class="hint">Barcodes scanned on your phone are typed into whatever window is focused on this machine.</p>
+      <p class="hint">USB tethering appears as a likely adapter when its name is exposed by the OS. It uses the same local WebSocket connection as Wi-Fi.</p>
     </div>
+  </section>
+
+  <section id="usbPanel">
+    <h2>USB cable · ADB</h2>
+    <div class="usb-actions">
+      <button id="usbToggle" type="button">Use USB</button>
+      <select id="usbDevices" aria-label="Connected Android phone" hidden></select>
+    </div>
+    <p id="usbState" role="status">Checking ADB…</p>
+    <p class="hint">Connect the cable, enable USB debugging, approve this computer on the phone, then select USB in the Android app. No Wi-Fi or firewall change needed.</p>
   </section>
 
   <section>
@@ -116,17 +135,58 @@
 
 <script>
 var selector = document.getElementById('network');
+var usbPanel = document.getElementById('usbPanel');
+var usbToggle = document.getElementById('usbToggle');
+var usbDevices = document.getElementById('usbDevices');
+var usbState = document.getElementById('usbState');
+var usbActive = false;
+function refreshUSB() {
+  fetch('/usb/status').then(function(r) { if (!r.ok) throw new Error('USB unavailable'); return r.json(); }).then(function(status) {
+    usbPanel.style.display = 'block';
+    usbActive = !!status.active;
+    usbToggle.textContent = usbActive ? 'Stop USB' : 'Use USB';
+    usbToggle.className = usbActive ? 'active' : '';
+    usbToggle.disabled = !status.available;
+    usbState.textContent = status.message || 'ADB unavailable';
+    usbState.className = status.state === 'ready' ? 'ready' : (status.state === 'error' ? 'error' : '');
+    var devices = status.devices || [];
+    usbDevices.hidden = devices.length < 2;
+    usbDevices.innerHTML = '';
+    devices.forEach(function(device) { usbDevices.add(new Option(device.label, device.serial)); });
+    if (status.selected) usbDevices.value = status.selected;
+  }).catch(function() { usbPanel.style.display = 'none'; });
+}
+function controlUSB(payload) {
+  fetch('/usb/control', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)})
+    .then(function(r) { if (!r.ok) throw new Error('USB control failed'); refreshUSB(); })
+    .catch(function(e) { usbState.textContent = e.message; usbState.className = 'error'; });
+}
+usbToggle.addEventListener('click', function() { controlUSB({active: !usbActive}); });
+usbDevices.addEventListener('change', function() { controlUSB({selected: usbDevices.value}); });
+refreshUSB();
+setInterval(refreshUSB, 2000);
 var initial = document.getElementById('wsurl').textContent;
-selector.add(new Option(initial, initial));
-fetch('/networks').then(function(r) { return r.json(); }).then(function(items) {
-  if (!items || !items.length) return;
-  selector.innerHTML = '';
-  items.forEach(function(item) { selector.add(new Option(item.label, item.url)); });
-  selector.value = initial;
-}).catch(function() {});
+var selected = initial;
+function refreshNetworks() {
+  fetch('/networks').then(function(r) { return r.json(); }).then(function(items) {
+    if (!items || !items.length) return;
+    var wanted = Array.prototype.some.call(items, function(item) { return item.url === selected; }) ? selected : items[0].url;
+    selector.innerHTML = '';
+    items.forEach(function(item) { selector.add(new Option(item.label, item.url)); });
+    selector.value = wanted;
+    if (wanted !== selected) {
+      selected = wanted;
+      document.getElementById('wsurl').textContent = wanted;
+      document.getElementById('qr').src = '/qr.png?endpoint=' + encodeURIComponent(wanted);
+    }
+  }).catch(function() {});
+}
+refreshNetworks();
+setInterval(refreshNetworks, 2500);
 selector.addEventListener('change', function() {
-  document.getElementById('wsurl').textContent = selector.value;
-  document.getElementById('qr').src = '/qr.png?endpoint=' + encodeURIComponent(selector.value);
+  selected = selector.value;
+  document.getElementById('wsurl').textContent = selected;
+  document.getElementById('qr').src = '/qr.png?endpoint=' + encodeURIComponent(selected);
 });
 var wsHost = location.host;
 var log = document.getElementById('log');

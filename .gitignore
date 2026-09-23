@@ -1,6 +1,7 @@
 # binaries live on GitHub Releases, not in the repo
 dist/
 *.exe
+!dekstop/usbtools/adb.exe
 *.apk
 dekstop/vbb
 

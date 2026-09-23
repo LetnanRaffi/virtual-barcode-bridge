@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <color name="scanbridge_icon_background">#07111F</color>
     <color name="bridge_bg">#101722</color>
     <color name="bridge_surface">#192433</color>
     <color name="bridge_border">#344256</color>

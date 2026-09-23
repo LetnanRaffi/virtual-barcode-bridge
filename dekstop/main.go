@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -9,13 +10,23 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"reflect"
 	"runtime"
 	"syscall"
+	"time"
 
 	"virtual-barcode-bridge/keyboard"
 	"virtual-barcode-bridge/network"
 	"virtual-barcode-bridge/server"
 )
+
+type usbController interface {
+	SetActive(bool)
+	Select(string)
+	Close()
+}
+
+var usb usbController
 
 func main() {
 	port := flag.Int("port", 8080, "listen port")
@@ -25,17 +36,20 @@ func main() {
 	noNative := flag.Bool("no-native", false, "don't open the native status window (Windows)")
 	flag.Parse()
 
-	options := network.Options(*port, *ipFlag)
-	if len(options) == 0 {
-		log.Fatal("No active network found. Connect Wi-Fi or LAN, then reopen the app.")
+	options, discoveryErr := network.Discover(*port, *ipFlag)
+	if discoveryErr != nil {
+		log.Printf("network discovery failed: %v", discoveryErr)
 	}
-	wsURL := options[0].URL
+	wsURL := fmt.Sprintf("ws://127.0.0.1:%d/ws", *port)
+	if len(options) > 0 {
+		wsURL = options[0].URL
+	}
 	for _, option := range options {
 		fmt.Printf("Network: %s (%s)\n", option.Label, option.URL)
 	}
 	uiURL := fmt.Sprintf("http://localhost:%d", *port)
 
-	fmt.Printf("Virtual Barcode Bridge\n")
+	fmt.Printf("ScanBridge\n")
 	fmt.Printf("WebSocket endpoint: %s\n", wsURL)
 	fmt.Printf("Web UI:            %s\n", uiURL)
 	if !*noQR {
@@ -49,15 +63,22 @@ func main() {
 
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
 	if err != nil {
-		log.Fatalf("listen port %d: %v", *port, err)
+		fatalDesktop(fmt.Sprintf("Port %d tidak tersedia: %v", *port, err))
 	}
+	usb = newUSBManager(*port)
+	defer usb.Close()
 
-	httpSrv := &http.Server{Handler: srv.Handler()}
+	mux := http.NewServeMux()
+	mux.Handle("/", srv.Handler())
+	mux.HandleFunc("/usb/status", handleUSBStatus)
+	mux.HandleFunc("/usb/control", handleUSBControl)
+	httpSrv := &http.Server{Handler: mux}
 	go func() {
 		if err := httpSrv.Serve(ln); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("server: %v", err)
 		}
 	}()
+	go refreshNetworks(srv, *port, *ipFlag, options)
 
 	usingNative := false
 	if !*noNative {
@@ -77,6 +98,90 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
 	fmt.Println("\nShutting down")
+}
+
+func localRequest(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	return err == nil && net.ParseIP(host).IsLoopback()
+}
+
+// USB control is limited to local desktop browsers, not clients on the LAN.
+func handleUSBStatus(w http.ResponseWriter, r *http.Request) {
+	if !localRequest(r) {
+		http.Error(w, "local access only", http.StatusForbidden)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if controller, ok := usb.(interface{ WebStatus() any }); ok {
+		_ = json.NewEncoder(w).Encode(controller.WebStatus())
+	} else {
+		_ = json.NewEncoder(w).Encode(map[string]any{"available": false})
+	}
+}
+
+func handleUSBControl(w http.ResponseWriter, r *http.Request) {
+	if !localRequest(r) {
+		http.Error(w, "local access only", http.StatusForbidden)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	// A local service can be reached by a malicious web page; require same-origin
+	// browser requests before changing ADB mappings.
+	if origin := r.Header.Get("Origin"); origin == "" || origin != "http://"+r.Host {
+		http.Error(w, "same origin required", http.StatusForbidden)
+		return
+	}
+	var request struct {
+		Active   *bool  `json:"active"`
+		Selected string `json:"selected"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&request); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	if request.Active != nil {
+		usb.SetActive(*request.Active)
+	}
+	if request.Selected != "" {
+		// Only a serial reported by ADB can be selected.
+		controller, ok := usb.(interface{ SelectValid(string) bool })
+		if !ok || !controller.SelectValid(request.Selected) {
+			http.Error(w, "unknown device", http.StatusBadRequest)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// refreshNetworks makes adapters added after startup (for example Android USB
+// tethering) selectable from the web UI without adding a protocol or listener.
+func refreshNetworks(srv *server.Server, port int, override string, current []network.Option) {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		options, err := network.Discover(port, override)
+		if err != nil {
+			log.Printf("network discovery refresh failed: %v", err)
+			continue
+		}
+		if reflect.DeepEqual(current, options) {
+			continue
+		}
+		current = options
+		srv.UpdateNetworks(options)
+		updateNativeNetworks(options)
+		log.Printf("network interfaces updated:")
+		for _, option := range options {
+			log.Printf("  %s (%s)", option.Label, option.URL)
+		}
+	}
 }
 
 // openBrowser opens url in the default browser without blocking.

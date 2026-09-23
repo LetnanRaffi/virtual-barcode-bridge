@@ -1,5 +1,9 @@
 # Windows executable verification
 
+## Current development build (2026-09-23)
+
+The USB ADB / connection-picker build with ScanBridge barcode acknowledgements was cross-compiled into `dist/vbb.exe` (Windows x64 GUI). Its SHA-256 is `88ce8a29ad3ba5660ee3fc00b7cefb3454be285cccaf2eb496eb71be0f66af5a`. Linux Go tests and the Android ScanBridge 1.0.0 debug APK build passed. The new native GUI and physical USB ADB flow have not yet been exercised on a Windows 10/11 computer with a phone; the checks below apply to the older 2026-09-17 build.
+
 Date: 2026-09-17
 
 Artifact: `dist/vbb.exe` (Windows x64)

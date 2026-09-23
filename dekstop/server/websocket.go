@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -25,7 +26,17 @@ var indexHTML []byte
 type Payload struct {
 	Type      string `json:"type"`
 	Data      string `json:"data"`
+	Value     string `json:"value"`
+	ID        string `json:"id"`
 	AutoEnter *bool  `json:"auto_enter"`
+}
+
+type barcodeAck struct {
+	Type    string `json:"type"`
+	ID      string `json:"id"`
+	Value   string `json:"value"`
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
 }
 
 // monitorEvent is pushed to web UI clients over /monitor.
@@ -75,16 +86,20 @@ func (h *monitorHub) emit(kind, format string, args ...any) {
 }
 
 type Server struct {
-	kb      keyboard.Injector
-	mu      sync.Mutex
-	monitor *monitorHub
-	qrPNG   []byte
-	wsURL   string
-	options []network.Option
+	kb        keyboard.Injector
+	mu        sync.Mutex
+	optionsMu sync.RWMutex
+	monitor   *monitorHub
+	qrPNG     []byte
+	wsURL     string
+	options   []network.Option
+	ackMu     sync.Mutex
+	seen      map[string]barcodeAck
+	seenOrder []string
 }
 
 func New(kb keyboard.Injector, wsURL string, options ...network.Option) *Server {
-	s := &Server{kb: kb, monitor: newMonitorHub(), wsURL: wsURL, options: options}
+	s := &Server{kb: kb, monitor: newMonitorHub(), wsURL: wsURL, options: options, seen: make(map[string]barcodeAck)}
 	if q, err := qrcode.New(wsURL, qrcode.Medium); err == nil {
 		s.qrPNG, _ = q.PNG(384)
 	}
@@ -97,7 +112,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/qr.png", s.handleQR)
 	mux.HandleFunc("/networks", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(s.options)
+		json.NewEncoder(w).Encode(s.Networks())
 	})
 	mux.HandleFunc("/ws", s.handleWS)
 	mux.HandleFunc("/monitor", s.handleMonitor)
@@ -119,7 +134,7 @@ func (s *Server) handleQR(w http.ResponseWriter, r *http.Request) {
 	png := s.qrPNG
 	if endpoint := r.URL.Query().Get("endpoint"); endpoint != "" && endpoint != s.wsURL {
 		allowed := false
-		for _, option := range s.options {
+		for _, option := range s.Networks() {
 			if endpoint == option.URL {
 				allowed = true
 				break
@@ -141,6 +156,21 @@ func (s *Server) handleQR(w http.ResponseWriter, r *http.Request) {
 	w.Write(png)
 }
 
+// UpdateNetworks refreshes selectable QR endpoints without restarting the
+// listener. The desktop already listens on every local interface.
+func (s *Server) UpdateNetworks(options []network.Option) {
+	s.optionsMu.Lock()
+	s.options = append([]network.Option(nil), options...)
+	s.optionsMu.Unlock()
+}
+
+// Networks returns a stable snapshot suitable for HTTP handlers and UI code.
+func (s *Server) Networks() []network.Option {
+	s.optionsMu.RLock()
+	defer s.optionsMu.RUnlock()
+	return append([]network.Option(nil), s.options...)
+}
+
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -148,6 +178,10 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
+	computerName, _ := os.Hostname()
+	if err := conn.WriteJSON(map[string]string{"type": "hello", "app": "vbb", "name": computerName}); err != nil {
+		return
+	}
 
 	a := conn.RemoteAddr().String()
 	s.monitor.emit("conn", "Client connected: %s", a)
@@ -162,17 +196,47 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			s.monitor.emit("warn", "bad payload from %s: %v", a, err)
 			continue
 		}
-		if p.Type != "scan" || p.Data == "" {
-			continue
-		}
 		autoEnter := true
 		if p.AutoEnter != nil {
 			autoEnter = *p.AutoEnter
 		}
-		s.inject(p.Data, autoEnter, a)
+		switch p.Type {
+		case "scan":
+			if p.Data != "" {
+				s.inject(p.Data, autoEnter, a)
+			}
+		case "barcode":
+			if p.ID == "" || p.Value == "" {
+				continue
+			}
+			if err := conn.WriteJSON(s.injectBarcode(p, autoEnter, a)); err != nil {
+				return
+			}
+		}
 	}
 
 	s.monitor.emit("disc", "Client disconnected: %s", a)
+}
+
+func (s *Server) injectBarcode(p Payload, autoEnter bool, source string) barcodeAck {
+	s.ackMu.Lock()
+	defer s.ackMu.Unlock()
+	if previous, ok := s.seen[p.ID]; ok {
+		return previous
+	}
+	ack := barcodeAck{Type: "barcode_ack", ID: p.ID, Value: p.Value}
+	if err := s.inject(p.Value, autoEnter, source); err != nil {
+		ack.Error = err.Error()
+	} else {
+		ack.Success = true
+	}
+	s.seen[p.ID] = ack
+	s.seenOrder = append(s.seenOrder, p.ID)
+	if len(s.seenOrder) > 500 {
+		delete(s.seen, s.seenOrder[0])
+		s.seenOrder = s.seenOrder[1:]
+	}
+	return ack
 }
 
 func (s *Server) handleInject(w http.ResponseWriter, r *http.Request) {
@@ -234,7 +298,7 @@ func (s *Server) inject(data string, autoEnter bool, source string) error {
 	s.mu.Lock()
 	typed := s.kb.Type(data)
 	entered := error(nil)
-	if autoEnter {
+	if autoEnter && typed == nil {
 		entered = s.kb.Enter()
 	}
 	s.mu.Unlock()
